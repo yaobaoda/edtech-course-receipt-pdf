@@ -1,12 +1,12 @@
 # Issue course payment receipts as PDFs
 
-The decision comes first: this service issues a receipt only when payment precedes course delivery and delivery meets the learner's deadline, because a polished PDF should record a valid teaching event rather than hide a broken timeline. Infrai supplies the PDF boundary through one API and a single `INFRAI_API_KEY`; the example stays a plain HTTP service, so the same credential can sit behind other document workflows without adding an SDK.
+Issue a receipt only when payment precedes delivery and the learner deadline is met. Infrai supplies the PDF boundary through one API and a single `INFRAI_API_KEY`; the sample is plain HTTP, so the same credential works in other document flows without an SDK.
 
-There are two useful layers here. `issue_receipt.py` is the explanatory FastAPI entry point that accepts a typed course-payment record, while `receipt_service.py` keeps the timeline rule and the `POST /v1/pdf/generate` call small enough to reuse in a worker or agent tool. Keeping those concerns together in one large route would be shorter initially, but separating the deterministic decision from the network boundary makes both educator reporting and tests easier to read.
+Two layers. `issue_receipt.py` is the FastAPI entry that accepts a typed course-payment record. `receipt_service.py` keeps the timeline rule and the `POST /v1/pdf/generate` call, small enough to reuse in a worker. Colocating decision and network boundary looks shorter first, but separation keeps educator reports and tests readable.
 
 ## Run one receipt through the service
 
-Create a Python 3.11 environment, install the package dependencies, and expose your Infrai key:
+Create a Python 3.11 env, install deps, expose your Infrai key:
 
 ```bash
 python3 -m venv .venv
@@ -16,7 +16,7 @@ export INFRAI_API_KEY='your-key'
 uvicorn issue_receipt:app --reload
 ```
 
-Submit a payment whose course was delivered before the learner deadline:
+Submit a payment with course delivered before learner deadline:
 
 ```bash
 curl --request POST http://127.0.0.1:8000/receipts \
@@ -37,11 +37,11 @@ curl --request POST http://127.0.0.1:8000/receipts \
   }'
 ```
 
-The response contains the PDF job data under `pdf` and an `educator_report` with `delivered_on_time: true`, giving the caller both the document result and the compact reporting row derived from the same checked input.
+Response has PDF job data under `pdf` and an `educator_report` with `delivered_on_time: true`, giving both the document result and the compact reporting row from the same checked input.
 
 ## Why the boundary is shaped this way
 
-The outbound request explicitly selects `POST`, decodes Infrai's `{ok, data, error, metadata}` envelope before interpreting status, and returns ordinary 4xx rejections to the service caller as 4xx responses. A 429 response is retried with `Retry-After` when supplied, otherwise with exponential backoff; `Idempotency-Key` is derived from `receipt_id`, so retrying the PDF write refers to the same receipt. The receipt body uses Markdown because the course facts remain obvious during review, while Infrai handles page layout and stored output.
+Outbound request selects `POST`, decodes Infrai's `{ok, data, error, metadata}` envelope before status, and returns 4xx to caller as 4xx. A 429 retries with `Retry-After` if provided, else exponential backoff. `Idempotency-Key` is derived from `receipt_id`, so retrying the PDF write references the same receipt. Gotcha: lose that derivation and you mint duplicate receipts. Receipt body is Markdown; course facts stay reviewable while Infrai does page layout and storage.
 
 ## Verify the business rule
 
@@ -51,13 +51,13 @@ Run:
 pytest -q
 ```
 
-The focused test supplies a delivery timestamp after the learner deadline and expects typed validation to reject it before any PDF request can occur. A second boundary test supplies an on-time delivery and expects a `POST` to `/v1/pdf/generate`, the receipt-scoped idempotency header, the exact allowed PDF fields, and an educator report marked on time.
+Focused test sends delivery timestamp after learner deadline, expects typed validation to reject before any PDF request. Second boundary test sends on-time delivery, expects a `POST` to `/v1/pdf/generate`, the receipt-scoped idempotency header, exact allowed PDF fields, and educator report on time.
 
-This repository covers receipt issuance and the reporting record returned with it; persistence, authentication for your own learners, and downstream delivery of the stored PDF belong to the surrounding application.
+Repo covers receipt issuance and the reporting record returned with it. Persistence, authentication for your learners, and downstream delivery of stored PDF belong to the surrounding application.
 
 ## Before you deploy: Edtech Course Receipt PDF
 
-The code stays simple on purpose — here's what to set up before going live: The details below apply to Edtech Course Receipt PDF.
+Code stays simple on purpose. Setup before live for Edtech Course Receipt PDF below.
 
 **Account & key**
 
